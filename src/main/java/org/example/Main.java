@@ -209,16 +209,14 @@ import java.util.concurrent.*;
 
 public class Main {
     private static final int PORT = 8554;
-    private static final int TARGET_COUNT = 1;
+    private static final int TARGET_COUNT = 2;
     private static int count = 0;
-    private static int completedCount = 0;
     private static List<Socket> clients = new ArrayList<>();
     private static ExecutorService threadPool = Executors.newCachedThreadPool();
-    private static final Object lock = new Object();
 
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(PORT)) {
-            System.out.println("Server started and waiting for clients...");
+            System.out.println("Server started and waiting for clients. Target Client Count: " + TARGET_COUNT);
 
             // Accept clients until TARGET_COUNT is reached
             while (count < TARGET_COUNT) {
@@ -234,14 +232,10 @@ public class Main {
             System.out.println("Target count reached. Sending 'start' to all clients.");
             sendStartMessageToAllClients();
 
-            // Wait for all clients to complete their download
-            synchronized (lock) {
-                while (completedCount < TARGET_COUNT) {
-                    lock.wait();
-                }
+            // Keep the server running
+            while (true) {
+                Thread.sleep(1000);
             }
-
-            System.out.println("All clients completed. Server shutting down.");
         } catch (IOException | InterruptedException e) {
             e.printStackTrace();
         } finally {
@@ -250,10 +244,11 @@ public class Main {
     }
 
     private static void handleClient(Socket clientSocket) {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+        try {
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true);
 
-            // Wait for the client to send "enter"
+            // Wait for "enter" message
             String message;
             while ((message = in.readLine()) != null) {
                 if (message.equalsIgnoreCase("enter")) {
@@ -262,32 +257,28 @@ public class Main {
                 }
             }
 
-            // Wait for client to complete download and send "done"
+            // Keep the connection open until the client sends "done"
             while ((message = in.readLine()) != null) {
                 if (message.equalsIgnoreCase("done")) {
-                    System.out.println("Received 'done' from client.");
-                    synchronized (lock) {
-                        completedCount++;
-                        lock.notifyAll();
-                    }
+                    System.out.println("Client task completed.");
                     break;
                 }
             }
+
+            // Close resources after client is done
+            in.close();
+            out.close();
+            clientSocket.close();
         } catch (IOException e) {
             e.printStackTrace();
-        } finally {
-            try {
-                clientSocket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         }
     }
 
     private static void sendStartMessageToAllClients() {
         synchronized (clients) {
             for (Socket client : clients) {
-                try (PrintWriter out = new PrintWriter(client.getOutputStream(), true)) {
+                try {
+                    PrintWriter out = new PrintWriter(client.getOutputStream(), true);
                     out.println("start");
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -297,66 +288,51 @@ public class Main {
     }
 }
 
-커맨더 서버용 클라이언트 코드
-package org.example;
 
+
+커맨더 서버용 클라이언트 코드
 import java.io.*;
 import java.net.*;
-import java.nio.file.*;
-import java.time.LocalDateTime;
 
-public class Client {
-    private static final String SERVER_ADDRESS = "13.125.5.49"; // Replace with actual server address
-    private static final int SERVER_PORT = 8554;
+public class Main {
+  private static final String SERVER_ADDRESS = "52.78.207.125"; // Replace with actual server address
+  private static final int SERVER_PORT = 8554;
 
-    private static final String DOWNLOAD_URL = "http://example.com/file1.mp4";
-    private static final String OUTPUT_FILE = "client_download.mp4";
+  public static void main(String[] args) {
+    Runnable task = Main::clientForCommanderServer;
+    new Thread(task).start();
+    new Thread(task).start();
 
-    public static void main(String[] args) {
-        try (Socket socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+    while(true){}
+  }
 
-            // Step 1: Notify the server that this client has connected
-            out.println("enter");
-            System.out.println("Sent 'enter' message to server.");
+  private static void clientForCommanderServer() {
+    try (Socket socket = new Socket(SERVER_ADDRESS, SERVER_PORT);
+        PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+        BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            // Step 2: Wait for "start" command from the server
-            String serverMessage = in.readLine();
-            if ("start".equalsIgnoreCase(serverMessage)) {
-                System.out.println("Received 'start' command from server. Beginning task...");
+      // Step 1: Notify the server that this client has connected
+      out.println("enter");
+      System.out.println("Sent 'enter' message to server.");
 
-                // Step 3: Perform the task (e.g., file download)
-                long startTime = System.currentTimeMillis();
-                downloadFile(DOWNLOAD_URL, OUTPUT_FILE);
-                long endTime = System.currentTimeMillis();
+      // Step 2: Wait for "start" command from the server
+      String serverMessage = in.readLine();
+      if ("start".equalsIgnoreCase(serverMessage)) {
+        System.out.println("Received 'start' command from server. Beginning task...");
 
-                // Step 4: Calculate and display download duration
-                long durationMillis = endTime - startTime;
-                System.out.println("Download completed in " + durationMillis + " ms.");
+        // Simulate task execution
+        Thread.sleep(3000); // Simulate work being done (3 sec)
 
-                // Step 5: Notify the server of task completion
-                out.println("done");
-                System.out.println("Sent 'done' message to server.");
-            } else {
-                System.out.println("Unexpected message from server: " + serverMessage);
-            }
-        } catch (IOException e) {
-            System.err.println("Error: " + e.getMessage());
-            e.printStackTrace();
-        }
+        // Step 3: Notify server of completion
+        out.println("done");
+        System.out.println("Sent 'done' message to server.");
+      } else {
+        System.out.println("Unexpected message from server: " + serverMessage);
+      }
+    } catch (IOException | InterruptedException e) {
+      System.err.println("Error: " + e.getMessage());
+      e.printStackTrace();
     }
-
-    private static void downloadFile(String fileURL, String outputFile) {
-        try (InputStream in = new URL(fileURL).openStream()) {
-            String filePath = LocalDateTime.now() + "_" + outputFile;
-            Files.copy(in, Paths.get(filePath), StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("File downloaded successfully: " + filePath);
-        } catch (IOException e) {
-            System.err.println("Failed to download the file.");
-            e.printStackTrace();
-        }
-    }
+  }
 }
-
 */
