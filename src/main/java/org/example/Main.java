@@ -1,30 +1,79 @@
 package org.example;
 
+import java.io.*;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.List;
 
 public class Main {
   public static void main(String[] args) {
-    String commanderServerAddr = "";
-    String rtspServerAddr = "";
-    int port = 8554;
+    String COMMANDER_SERVER_ADDR = "localhost";
+    String RTSP_SERVER_ADDR = "localhost";
+    String CRLF = "\r\n";
+    String CRLF2 = "\r\n\r\n";
+    int COMMANDER_PORT = 8555;
+    int PORT = 8554;
     List<Long> markerBitRecvTimes = new ArrayList<>();
-    try {
+
+    String optionsReq = "OPTIONS rtsp://0.0.0.0:0/enhypen-test-1cam-H RTSP/1.0" + CRLF
+            + "User-Agent: ExoPlayerLib/2.17.1" + CRLF
+            + "CSeq: 0" + CRLF2;
+    String describeReq = "";
+    String setupFrontVideoReq = "";
+    String setupRearVideoReq = "";
+    String setupAudioReq = "";
+    String playReq = "";
+
+    try(
+            Socket socket = new Socket(COMMANDER_SERVER_ADDR, COMMANDER_PORT);
+            PrintWriter commanderOut = new PrintWriter(socket.getOutputStream(), true);
+            BufferedReader commanderIn = new BufferedReader(new InputStreamReader(socket.getInputStream()))
+    ) {
       // 커맨더 서버에 연결한 후, 시작 명령을 받을 때까지 대기한다.
+      commanderOut.println("enter");
+      System.out.println("Sent 'enter' message to server.");
 
-      // RTSP 스트리밍 서버에 재생 요청을 한다. 풀 스트리밍 모드로 요청해야 한다.
-      // PLAY 요청에 대한 응답을 받은 직후로부터 별도의 타이머를 작동시킨다.
+      String serverMessage = commanderIn.readLine();
+      if ("start".equalsIgnoreCase(serverMessage)) {
+        // RTSP 스트리밍 서버에 재생 요청을 한다. 풀 스트리밍 모드로 요청해야 한다.
+        // PLAY 요청에 대한 응답을 받은 직후로부터 별도의 타이머를 작동시킨다.
+        Socket rtspSocket = new Socket(RTSP_SERVER_ADDR, PORT);
+        DataInputStream rtspInputStream = new DataInputStream(new BufferedInputStream(rtspSocket.getInputStream()));
 
-      // marker bit이 0이 아닌 샘플을 받을 때마다 그 시각을 기록한다.
+        rtspSocket.getOutputStream().write(optionsReq.getBytes());
 
-      // 타이머가 작동을 시작한지 35초가 되었다면, 스트리밍 서버에 PAUSE, TEARDOWN 요청을 보낸다.
+        String optionsRes = "";
+        // 응답이 200 OK면 다음 단계 진행
+        while(true){
+          byte[] buffer = new byte[1400];
+          if(rtspInputStream.read(buffer) > 0){
+            optionsRes = new String(buffer);
+            break;
+          }
+        }//inner wh
 
-      // 결과를 별도의 파일에 기록한다.
+        if(!optionsRes.contains("RTSP/1.0 200 OK")){
+          throw new RuntimeException("Options Req failed!");
+        }
 
-      // 도커 컨테이너가 종료되지 않도록 무한 루프를 작동시킨다.
-      // ... Docker Desktop을 이용해서 컨테이너를 강제종료시킬 때까지 대기한다.
-      while(true){
-        Thread.sleep(1000);
+        // marker bit이 0이 아닌 비디오 RTP 패킷을 받을 때마다 그 시각을 기록한다.
+
+        // 타이머가 작동을 시작한지 35초가 되었다면, 스트리밍 서버에 PAUSE, TEARDOWN 요청을 보낸다.
+
+        // 결과를 별도의 파일에 기록한다.
+
+
+        commanderOut.println("done");
+        System.out.println("Sent 'done' message to server.");
+        rtspSocket.close();
+
+        // 도커 컨테이너가 종료되지 않도록 무한 루프를 작동시킨다.
+        // ... Docker Desktop을 이용해서 컨테이너를 강제종료시킬 때까지 대기한다.
+        while(true){
+          Thread.sleep(1000);
+        }
+      } else {
+        System.out.println("Unexpected message from server: " + serverMessage);
       }
 
     } catch (Exception e){
