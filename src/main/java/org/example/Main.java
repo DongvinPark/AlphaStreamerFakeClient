@@ -208,10 +208,14 @@ public class Main {
 
         // 결과를 별도의 파일에 기록한다.
         List<Long> delayTimeMillis = new ArrayList<>();
+        int overDelayTimeCnt = 0;
         for(int i = 1; i<(markerBitRecvTimes.size()); i++){
           long delayTimeVal = markerBitRecvTimes.get(i) - markerBitRecvTimes.get(i-1);
           //System.out.println("delay time millis to receive sample no " + i + " : " + delayTimeVal);
           delayTimeMillis.add(delayTimeVal);
+          if(delayTimeVal > 33){
+            overDelayTimeCnt ++;
+          }
         }
 
         long min = delayTimeMillis.stream().min(Long::compare).orElse(-1L);
@@ -224,15 +228,24 @@ public class Main {
         double stdDev = Math.sqrt(variance);
 
         // 결과 표시
-        System.out.println("Received Front Video Sample Cnt = " + markerBitRecvTimes.size());
-        System.out.println("Min: " + min);
-        System.out.println("Max: " + max);
-        System.out.println("Average: " + avg);
-        System.out.println("Standard Deviation: " + stdDev);
+        //System.out.println("Final Result : " + (overDelayTimeCnt < 150 ? "Acceptable Playback" : "Unacceptable Playback!"));
+        StringBuilder resultSb = new StringBuilder();
+        resultSb.append("Received Front Video Sample Cnt = " + markerBitRecvTimes.size() + "\n");
+        resultSb.append("Min: " + min + "\n");
+        resultSb.append("Max: " + max + "\n");
+        resultSb.append("Average: " + avg + "\n");
+        resultSb.append("Standard Deviation: " + stdDev + "\n");
+        resultSb.append("Over 33 ms Cnt : " + overDelayTimeCnt + "\n");
+        resultSb.append("Delay time millis origin record : " + "\n" + delayTimeMillis.toString());
+
+        System.out.println(resultSb);
+        BufferedWriter writer = new BufferedWriter(new FileWriter("result.txt"));
+        writer.write(resultSb.toString());
 
         commanderOut.println("done");
         System.out.println("Sent 'done' message to server.");
         rtspSocket.close();
+        writer.close();
         timer.cancel();
 
         // 도커 컨테이너가 종료되지 않도록 무한 루프를 작동시킨다.
