@@ -2,9 +2,7 @@ package org.example;
 
 import java.io.*;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 public class Main {
   public static void main(String[] args) {
@@ -161,9 +159,8 @@ public class Main {
           throw new RuntimeException("Describe Req failed!");
         }
 
-        // marker bit이 0이 아닌 비디오 RTP 패킷을 받을 때마다 그 시각을 기록한다.
         // 테스트용.
-        int cnt = 0;
+        /*int cnt = 0;
         while(true){
           byte[] array = new byte[1400];
           int bytesRead = rtspInputStream.read(array);
@@ -171,19 +168,72 @@ public class Main {
           cnt++;
           if(bytesRead < 0 || cnt > 3000) break;
         }
-
         Thread.sleep(1000);
+        rtspSocket.getOutputStream().write(teardownReq.getBytes());*/
 
-        rtspSocket.getOutputStream().write(teardownReq.getBytes());
+        // marker bit이 0이 아닌 비디오 RTP 패킷을 받을 때마다 그 시각을 기록한다.
+        Timer timer = new Timer();
+        final int[] playtimeDurationSec = {0};
+        timer.scheduleAtFixedRate(new TimerTask() {
+          @Override
+          public void run() {
+            playtimeDurationSec[0]++;
+          }
+        }, 0, 1000);
 
         // 타이머가 작동을 시작한지 35초가 되었다면, 스트리밍 서버에 PAUSE, TEARDOWN 요청을 보낸다.
+          while (playtimeDurationSec[0] < 35 && markerBitRecvTimes.size() != 900) {
+            try {
+              byte[] rtpMeta = new byte[4];
+              rtspInputStream.readFully(rtpMeta, 0, rtpMeta.length);
+              if (rtpMeta[0] != '$') {
+                throw new RuntimeException("Invalid interleaved data marker!");
+              }
+
+              int packetLen = ((rtpMeta[2] & 0xFF) << 8) | (rtpMeta[3] & 0xFF);
+              byte[] rtpPacket = new byte[packetLen];
+              rtspInputStream.readFully(rtpPacket, 0, rtpPacket.length);
+
+              if (
+                      rtpMeta[1] == 0 &&
+                              ((rtpPacket[1] & 0x80) != 0)
+              ) {
+                markerBitRecvTimes.add(System.currentTimeMillis());
+              }
+            } catch (Exception e){
+              e.printStackTrace();
+              break;
+            }
+          }
 
         // 결과를 별도의 파일에 기록한다.
+        List<Long> delayTimeMillis = new ArrayList<>();
+        for(int i = 1; i<(markerBitRecvTimes.size()); i++){
+          long delayTimeVal = markerBitRecvTimes.get(i) - markerBitRecvTimes.get(i-1);
+          //System.out.println("delay time millis to receive sample no " + i + " : " + delayTimeVal);
+          delayTimeMillis.add(delayTimeVal);
+        }
 
+        long min = delayTimeMillis.stream().min(Long::compare).orElse(-1L);
+        long max = delayTimeMillis.stream().max(Long::compare).orElse(-1L);
+        double avg = delayTimeMillis.stream().mapToLong(Long::longValue).average().orElse(-1.0);
+        double variance = delayTimeMillis.stream()
+                .mapToDouble(num -> Math.pow(num - avg, 2))
+                .average()
+                .orElse(0.0);
+        double stdDev = Math.sqrt(variance);
+
+        // 결과 표시
+        System.out.println("Received Front Video Sample Cnt = " + markerBitRecvTimes.size());
+        System.out.println("Min: " + min);
+        System.out.println("Max: " + max);
+        System.out.println("Average: " + avg);
+        System.out.println("Standard Deviation: " + stdDev);
 
         commanderOut.println("done");
         System.out.println("Sent 'done' message to server.");
         rtspSocket.close();
+        timer.cancel();
 
         // 도커 컨테이너가 종료되지 않도록 무한 루프를 작동시킨다.
         // ... Docker Desktop을 이용해서 컨테이너를 강제종료시킬 때까지 대기한다.
