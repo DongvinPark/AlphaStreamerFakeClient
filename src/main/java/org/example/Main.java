@@ -6,12 +6,12 @@ import java.util.*;
 
 public class Main {
   public static void main(String[] args) {
-    String COMMANDER_SERVER_ADDR = "localhost";
-    String RTSP_SERVER_ADDR = "localhost";
+    String COMMANDER_SERVER_ADDR = "15.165.161.252";
+    String RTSP_SERVER_ADDR = "3.39.254.33";
     String CRLF = "\r\n";
     String CRLF2 = "\r\n\r\n";
     String sessionId = "";
-    int COMMANDER_PORT = 8555;
+    int COMMANDER_PORT = 8554;
     int RTSP_SERVER_PORT = 8554;
     List<Long> markerBitRecvTimes = new ArrayList<>();
 
@@ -205,6 +205,8 @@ public class Main {
               break;
             }
           }
+
+        rtspSocket.getOutputStream().write(teardownReq.getBytes());
 
         // 결과를 별도의 파일에 기록한다.
         List<Long> delayTimeMillis = new ArrayList<>();

@@ -6,6 +6,10 @@ plugins {
 group = 'org.example'
 version = '1.0-SNAPSHOT'
 
+bootJar {
+    archiveFileName = 'app.jar'
+}
+
 repositories {
     mavenCentral()
 }
