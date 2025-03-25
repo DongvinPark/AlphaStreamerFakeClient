@@ -6,8 +6,8 @@ import java.util.*;
 
 public class Main {
   public static void main(String[] args) {
-    String COMMANDER_SERVER_ADDR = "15.165.161.252";
-    String RTSP_SERVER_ADDR = "3.39.254.33";
+    String COMMANDER_SERVER_ADDR = "54.180.109.39";
+    String RTSP_SERVER_ADDR = "43.203.182.50";
     String CRLF = "\r\n";
     String CRLF2 = "\r\n\r\n";
     String sessionId = "";
@@ -238,12 +238,12 @@ public class Main {
         resultSb.append("Average: " + avg + "\n");
         resultSb.append("Standard Deviation: " + stdDev + "\n");
         resultSb.append("Over 33 ms Cnt : " + overDelayTimeCnt + "\n");
-        resultSb.append("Delay time millis origin record : " + "\n" + delayTimeMillis.toString());
 
         System.out.println(resultSb);
         BufferedWriter writer = new BufferedWriter(new FileWriter("result.txt"));
         writer.write(resultSb.toString());
 
+        commanderOut.println(resultSb);
         commanderOut.println("done");
         System.out.println("Sent 'done' message to server.");
         rtspSocket.close();
